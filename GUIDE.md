@@ -19,7 +19,8 @@
 10. [Read API Documentation (Swagger)](#10-read-api-documentation-swagger)
 11. [Call an API from Java Code](#11-call-an-api-from-java-code)
 12. [Run Automated Tests with REST-assured](#12-run-automated-tests-with-rest-assured)
-13. [Build a Tiny REST API (Your Exercise)](#13-build-a-tiny-rest-api-your-exercise)
+13. [Variables in API Testing](#13-variables-in-api-testing)
+14. [Build a Tiny REST API (Your Exercise)](#14-build-a-tiny-rest-api-your-exercise)
 
 ---
 
@@ -1009,7 +1010,7 @@ These come from the `org.hamcrest.Matchers` static import:
 
 ### Adding Your Own Test
 
-Once you complete the exercise in Section 13 (Coupon feature), add a test for it:
+Once you complete the exercise in Section 14 (Coupon feature), add a test for it:
 
 ```java
 @Test
@@ -1037,7 +1038,272 @@ void createCoupon_asAdmin_returns201() {
 
 ---
 
-## 13. Build a Tiny REST API (Your Exercise)
+## 13. Variables in API Testing
+
+Variables let you write tests and requests that work across different environments, avoid copy-pasting the same values everywhere, and chain API calls together (use the output of one request as the input of the next).
+
+Think of them the same way you think of variables in Java — instead of hardcoding `"http://localhost:8080"` in 50 test methods, you store it once and reference it by name.
+
+---
+
+### The 5 Types of Variables
+
+| Type | What it stores | Changes per... | Example |
+|------|---------------|----------------|---------|
+| **Configuration** | Base URL, port, environment name | Environment (dev/staging/prod) | `http://localhost:8080` |
+| **Credential** | Usernames, passwords, tokens | Environment or user role | `admin` / `password123` |
+| **Extracted** | Values pulled from a response | Each test run | The `id` from a `POST` response |
+| **Request Spec** | Pre-built request template (headers, auth, content-type) | Role | Admin spec, User spec |
+| **Response Spec** | Pre-built assertion template | Status / content contract | "must be 200 + JSON" |
+
+---
+
+### Variables in Postman
+
+#### Step 1 — Create an Environment
+
+An **Environment** in Postman is a named set of variables that you can switch between (Dev, Staging, Prod).
+
+1. Click the **Environments** icon (the eye icon, top-right of Postman)
+2. Click **+ Create Environment**
+3. Name it `Local Dev`
+4. Add these variables:
+
+| Variable | Initial Value | Current Value |
+|----------|--------------|---------------|
+| `baseUrl` | `http://localhost:8080` | `http://localhost:8080` |
+| `adminUsername` | `admin` | `admin` |
+| `adminPassword` | `password123` | `password123` |
+| `userUsername` | `user` | `user` |
+| `userPassword` | `user123` | `user123` |
+
+5. Click **Save**
+6. Select `Local Dev` from the environment dropdown (top-right corner)
+
+#### Step 2 — Use Variables in Requests
+
+In the URL bar, use `{{variableName}}` anywhere:
+
+```
+{{baseUrl}}/api/products
+{{baseUrl}}/api/products/{{createdProductId}}
+```
+
+In the **Auth** tab → Basic Auth:
+```
+Username: {{adminUsername}}
+Password: {{adminPassword}}
+```
+
+In the **Headers** tab:
+```
+X-Environment: {{POSTMAN_ENVIRONMENT_NAME}}
+```
+
+Postman replaces `{{variableName}}` with the current value before sending. The URL bar shows the resolved value in orange when you hover over it.
+
+#### Step 3 — Extract a Value from a Response into a Variable
+
+This is how you chain requests: take the `id` from a `POST /products` response and use it in the next `GET /products/{{createdProductId}}` request.
+
+In the **Scripts → Post-response** tab of your `POST /products` request, add:
+
+```javascript
+// Parse the response JSON
+var body = pm.response.json();
+
+// Store the returned id into an environment variable
+pm.environment.set("createdProductId", body.id);
+
+console.log("Captured product ID: " + body.id);
+```
+
+Now in your next request URL:
+```
+{{baseUrl}}/api/products/{{createdProductId}}
+```
+
+Postman fills in the value automatically using what the previous request set.
+
+#### Step 4 — Variable Scope (which value wins?)
+
+Postman has four scopes. When the same variable name exists in multiple scopes, the **narrowest** scope wins:
+
+```
+Global  ←  widest, shared across all workspaces
+  └── Collection  ←  shared across all requests in one collection
+        └── Environment  ←  switched per environment (Dev/Staging/Prod)
+              └── Local  ←  narrowest, set during a single request's script
+```
+
+**In practice:**
+- Use **Environment** variables for anything that changes between Dev/Staging/Prod (base URL, credentials)
+- Use **Collection** variables for values shared across a collection but not environment-specific
+- Use **Local** (script) variables for values extracted from responses and passed between requests
+
+#### Step 5 — Exercise: Chain Three Postman Requests
+
+1. **Request 1** — `POST {{baseUrl}}/api/products` with admin auth and a JSON body
+   - In **Scripts → Post-response**: `pm.environment.set("productId", pm.response.json().id)`
+
+2. **Request 2** — `POST {{baseUrl}}/api/orders` with user auth and body:
+   ```json
+   { "productId": {{productId}}, "quantity": 1 }
+   ```
+   - In **Scripts → Post-response**: `pm.environment.set("orderId", pm.response.json().id)`
+
+3. **Request 3** — `PATCH {{baseUrl}}/api/orders/{{orderId}}/status` with body:
+   ```json
+   { "status": "CONFIRMED" }
+   ```
+
+Run them in order. Each request feeds the next. This is a **Postman Collection Runner** workflow.
+
+---
+
+### Variables in REST-assured
+
+The test file [VariablesTest.java](src/test/java/com/learn/restapi/restassured/VariablesTest.java) demonstrates all five types with runnable examples.
+
+#### TYPE 1 — Configuration Variables
+
+```java
+// Defined once at the top of the class
+private static final String BASE_URL  = "http://localhost";
+private static final int    PORT      = 8080;
+private static final String BASE_PATH = "/api";
+
+// Applied globally in @BeforeAll — every request inherits these
+RestAssured.baseURI  = BASE_URL;
+RestAssured.port     = PORT;
+RestAssured.basePath = BASE_PATH;
+```
+
+To point at staging: change `BASE_URL` and `PORT` in one place.
+
+#### TYPE 2 — Credential Variables
+
+```java
+private static final String ADMIN_USER = "admin";
+private static final String ADMIN_PASS = "password123";
+
+// Used wherever admin auth is needed
+.header("Authorization", basicAuthHeader(ADMIN_USER, ADMIN_PASS))
+```
+
+In real projects, read these from system properties or environment variables:
+```java
+private static final String ADMIN_PASS = System.getenv("ADMIN_PASSWORD");
+```
+
+#### TYPE 3 — Extracted Variables (the most important one)
+
+This is the REST-assured equivalent of `pm.environment.set(...)`.
+
+```java
+// Declare a static field to hold the value across test methods
+private static int createdProductId;
+
+// In one @Test — capture the ID from the POST response
+createdProductId = given()
+        .spec(adminSpec)
+        .body(productJson)
+    .when()
+        .post("/products")
+    .then()
+        .statusCode(201)
+        .extract().path("id");   // ← pulls "id" field from the JSON response
+
+// In the NEXT @Test — use the captured ID
+given()
+    .when()
+        .get("/products/" + createdProductId)   // ← same variable
+    .then()
+        .statusCode(200);
+```
+
+| Postman | REST-assured |
+|---------|-------------|
+| `pm.environment.set("productId", body.id)` | `createdProductId = ...extract().path("id")` |
+| `{{productId}}` in URL | `"/products/" + createdProductId` |
+
+#### TYPE 4 — Request Spec Variables (RequestSpecBuilder)
+
+A `RequestSpecification` pre-packages headers, content-type, and auth so you don't repeat them on every test.
+
+```java
+// Built once in @BeforeAll
+private static RequestSpecification adminSpec;
+
+adminSpec = new RequestSpecBuilder()
+        .setContentType(ContentType.JSON)
+        .setAccept(ContentType.JSON)
+        .addHeader("Authorization", basicAuthHeader(ADMIN_USER, ADMIN_PASS))
+        .build();
+
+// Used in every test that needs admin auth — three lines become one
+given()
+    .spec(adminSpec)   // ← replaces: contentType + accept + auth header
+    .body(...)
+.when()
+    .post("/products")
+```
+
+| Without spec | With spec |
+|-------------|-----------|
+| `.contentType(JSON)` | `.spec(adminSpec)` |
+| `.accept(JSON)` | |
+| `.auth().basic("admin","password123")` | |
+
+#### TYPE 5 — Response Spec Variables (ResponseSpecBuilder)
+
+A `ResponseSpecification` pre-packages common assertions.
+
+```java
+// Built once
+private static ResponseSpecification okJsonSpec;
+
+okJsonSpec = new ResponseSpecBuilder()
+        .expectStatusCode(200)
+        .expectContentType(ContentType.JSON)
+        .build();
+
+// Applied to every endpoint that must return 200 + JSON
+given().spec(publicSpec).when().get("/products").then().spec(okJsonSpec);
+given().spec(userSpec).when().get("/orders").then().spec(okJsonSpec);
+```
+
+---
+
+### Run the Variable Tests
+
+```bash
+# All 8 tests
+mvn test -Dtest=VariablesTest
+
+# Just the chaining test
+mvn test -Dtest=VariablesTest#allTypes_fullChainedScenario
+
+# Just the extraction test
+mvn test -Dtest=VariablesTest#type3_extractedVariables_captureIdFromCreateResponse
+```
+
+---
+
+### Quick Comparison — Postman vs REST-assured
+
+| Concept | Postman | REST-assured |
+|---------|---------|-------------|
+| Base URL | Environment variable `{{baseUrl}}` | `RestAssured.baseURI = BASE_URL` |
+| Credentials | Environment variables `{{adminUsername}}` | `private static final String ADMIN_USER` |
+| Extract from response | `pm.environment.set("id", body.id)` | `id = ...extract().path("id")` |
+| Use in next request | `{{id}}` in URL | `"/products/" + id` |
+| Reusable request setup | Collection-level Auth + Headers | `RequestSpecBuilder` → `RequestSpecification` |
+| Reusable assertions | Collection-level Tests script | `ResponseSpecBuilder` → `ResponseSpecification` |
+
+---
+
+## 14. Build a Tiny REST API (Your Exercise)
 
 Now you build one. Add a **Coupon** feature to this project.
 
