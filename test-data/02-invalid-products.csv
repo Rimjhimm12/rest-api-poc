@@ -1,0 +1,6 @@
+name,description,price,category,stock,scenario,expectedField
+,,99.99,Electronics,10,Missing name and description,name
+Valid Name,,99.99,Electronics,10,Missing description,description
+Valid Name,Valid desc,-10,Electronics,10,Negative price,price
+Valid Name,Valid desc,99.99,,10,Missing category,category
+Valid Name,Valid desc,99.99,Electronics,-5,Negative stock,stock

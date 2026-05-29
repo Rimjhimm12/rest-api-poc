@@ -1,0 +1,6 @@
+username,password,expectedStatus,scenario
+admin,password123,200,Valid admin credentials
+user,user123,200,Valid user credentials
+admin,wrongpassword,401,Correct username wrong password
+wronguser,password123,401,Wrong username correct password
+hacker,hacker123,401,Both credentials wrong

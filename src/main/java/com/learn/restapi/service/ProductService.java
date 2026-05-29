@@ -30,6 +30,8 @@ public class ProductService {
                 "Industry-leading noise cancelling headphones", 349.99, "Electronics", 30));
         products.add(new Product(idCounter.getAndIncrement(), "Levi's 501 Jeans",
                 "Classic straight fit denim jeans", 59.99, "Clothing", 300));
+        products.add(new Product(idCounter.getAndIncrement(), "Levi's 69 Jeans",
+                "Classic Skinny fit jeans", 29.99, "Clothing", 290));
     }
 
     public List<Product> findAll(String category, Double minPrice, Double maxPrice) {

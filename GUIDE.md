@@ -20,7 +20,9 @@
 11. [Call an API from Java Code](#11-call-an-api-from-java-code)
 12. [Run Automated Tests with REST-assured](#12-run-automated-tests-with-rest-assured)
 13. [Variables in API Testing](#13-variables-in-api-testing)
-14. [Build a Tiny REST API (Your Exercise)](#14-build-a-tiny-rest-api-your-exercise)
+14. [Data-Driven API Testing in Postman](#14-data-driven-api-testing-in-postman)
+15. [File Upload Operations](#15-file-upload-operations)
+16. [Build a Tiny REST API (Your Exercise)](#16-build-a-tiny-rest-api-your-exercise)
 
 ---
 
@@ -1010,7 +1012,7 @@ These come from the `org.hamcrest.Matchers` static import:
 
 ### Adding Your Own Test
 
-Once you complete the exercise in Section 14 (Coupon feature), add a test for it:
+Once you complete the exercise in Section 16 (Coupon feature), add a test for it:
 
 ```java
 @Test
@@ -1303,7 +1305,736 @@ mvn test -Dtest=VariablesTest#type3_extractedVariables_captureIdFromCreateRespon
 
 ---
 
-## 14. Build a Tiny REST API (Your Exercise)
+## 14. Data-Driven API Testing in Postman
+
+### What is Data-Driven Testing?
+
+You already know this concept from Selenium — instead of writing one test per input, you write the test **once** and feed it a table of inputs. Each row runs the same request with different values.
+
+```
+Without data-driven:          With data-driven:
+  Test 1: create iPhone         1 request  ←──┐
+  Test 2: create Laptop         1 CSV file     │  5 rows → 5 runs
+  Test 3: create Chair          (5 rows)   ────┘
+  Test 4: create Bottle
+  Test 5: create Book
+```
+
+In Postman, this works by:
+1. Writing a request that uses `{{variableName}}` placeholders
+2. Preparing a **CSV or JSON data file** — one row per test run
+3. Running it through the **Collection Runner** which feeds each row in turn
+4. Writing assertions in the **Scripts** tab that use `pm.iterationData.get("columnName")` to read the current row's values
+
+---
+
+### Core Concepts Before You Start
+
+**`{{variableName}}` in a request** — Postman replaces it with the current iteration's value from the data file before sending.
+
+**`pm.iterationData.get("columnName")`** — reads the value from the current row of your data file inside a Script.
+
+**Collection Runner** — the Postman tool that reads a data file and runs a request once per row.
+
+**Iteration** — one run of the request with one row of data. 5 rows = 5 iterations.
+
+---
+
+### One-Time Setup — Create a Collection
+
+All data-driven tests must live inside a **Collection** (a folder of requests). Do this once:
+
+1. In Postman, click **Collections** in the left sidebar
+2. Click **+** → **Blank collection**
+3. Name it `E-Commerce API — Data-Driven Tests`
+4. Click **Create**
+
+Also set up an Environment so the base URL is a variable (from Section 13):
+- Environment name: `Local Dev`
+- Variable: `baseUrl` = `http://localhost:8080`
+
+Select `Local Dev` from the environment dropdown (top-right).
+
+---
+
+### Exercise 1 — Create Multiple Products from a CSV (Happy Path)
+
+**Goal:** Run one POST request 5 times — each time creating a different product from the CSV.
+
+**Data file:** [`test-data/01-create-products.csv`](test-data/01-create-products.csv)
+
+```
+name,description,price,category,stock
+Gaming Chair,Ergonomic gaming chair...,249.99,Furniture,15
+Mechanical Keyboard,RGB backlit keyboard,129.99,Electronics,40
+Yoga Mat,Non-slip eco-friendly mat,34.99,Sports,200
+Stainless Steel Bottle,32oz insulated bottle,24.99,Kitchen,150
+Java Programming Book,Complete Java guide,49.99,Books,80
+```
+
+#### Step 1 — Add a request to the collection
+
+1. Click the **...** next to your collection → **Add request**
+2. Name it `Create Product`
+3. Set method to **POST**
+4. URL: `{{baseUrl}}/api/products`
+
+#### Step 2 — Set the Auth
+
+1. Click the **Authorization** tab
+2. Type: **Basic Auth**
+3. Username: `admin` &nbsp;&nbsp; Password: `password123`
+
+#### Step 3 — Set the Body
+
+1. Click the **Body** tab
+2. Select **raw** → **JSON**
+3. Paste this — notice `{{variableName}}` placeholders for every column:
+
+```json
+{
+  "name":        "{{name}}",
+  "description": "{{description}}",
+  "price":        {{price}},
+  "category":    "{{category}}",
+  "stock":        {{stock}}
+}
+```
+
+> ⚠️ **Important gotcha:** `price` and `stock` have **no quotes** because they are numbers. If you write `"{{price}}"` with quotes, the server receives a string and returns a 400 validation error.
+
+#### Step 4 — Write the assertions (Scripts tab)
+
+1. Click the **Scripts** tab → **Post-response** (older Postman: the **Tests** tab)
+2. Paste this:
+
+```javascript
+// Read the expected values from the current CSV row
+var expectedName     = pm.iterationData.get("name");
+var expectedCategory = pm.iterationData.get("category");
+var expectedPrice    = parseFloat(pm.iterationData.get("price"));
+var expectedStock    = parseInt(pm.iterationData.get("stock"));
+
+// Assert status code
+pm.test("Status is 201 Created", function () {
+    pm.response.to.have.status(201);
+});
+
+// Assert the response body matches what we sent
+pm.test("Returned name matches input", function () {
+    pm.expect(pm.response.json().name).to.equal(expectedName);
+});
+
+pm.test("Returned category matches input", function () {
+    pm.expect(pm.response.json().category).to.equal(expectedCategory);
+});
+
+pm.test("Returned price matches input", function () {
+    pm.expect(pm.response.json().price).to.equal(expectedPrice);
+});
+
+pm.test("Returned stock matches input", function () {
+    pm.expect(pm.response.json().stock).to.equal(expectedStock);
+});
+
+pm.test("Response contains an auto-generated id", function () {
+    pm.expect(pm.response.json().id).to.be.a("number");
+});
+```
+
+#### Step 5 — Run with the Collection Runner
+
+1. Click the **...** next to your collection → **Run collection**
+2. In the runner panel, select only the `Create Product` request (deselect others)
+3. Under **Data**, click **Select File** → choose `test-data/01-create-products.csv`
+4. Postman shows **Preview** — you should see 5 rows
+5. **Iterations** auto-sets to 5 (one per row)
+6. Click **Run E-Commerce API — Data-Driven Tests**
+
+#### What to observe
+
+- **5 iterations** run one after the other
+- Each row's values are shown next to the iteration number
+- Green ticks = all assertions passed for that row
+- Red X = assertion failed — click the row to see which test failed and what values were used
+- A summary at the top shows **Total passed / Total failed**
+
+---
+
+### Exercise 2 — Test Invalid Inputs (Negative Testing)
+
+**Goal:** Confirm the API returns 400 and flags the correct broken field for 5 different invalid payloads.
+
+**Data file:** [`test-data/02-invalid-products.csv`](test-data/02-invalid-products.csv)
+
+```
+name,description,price,category,stock,scenario,expectedField
+,,99.99,Electronics,10,Missing name and description,name
+Valid Name,,99.99,Electronics,10,Missing description,description
+Valid Name,Valid desc,-10,Electronics,10,Negative price,price
+Valid Name,Valid desc,99.99,,10,Missing category,category
+Valid Name,Valid desc,99.99,Electronics,-5,Negative stock,stock
+```
+
+#### Step 1 — Add a new request to the collection
+
+1. Add request → name it `Create Product — Invalid`
+2. Method: **POST**, URL: `{{baseUrl}}/api/products`
+3. Auth: **Basic Auth** → `admin` / `password123`
+
+#### Step 2 — Body (same placeholders as Exercise 1)
+
+```json
+{
+  "name":        "{{name}}",
+  "description": "{{description}}",
+  "price":        {{price}},
+  "category":    "{{category}}",
+  "stock":        {{stock}}
+}
+```
+
+#### Step 3 — Scripts → Post-response
+
+```javascript
+var scenario      = pm.iterationData.get("scenario");
+var expectedField = pm.iterationData.get("expectedField");
+
+// Every row must return 400
+pm.test("[" + scenario + "] Status is 400 Bad Request", function () {
+    pm.response.to.have.status(400);
+});
+
+// The fieldErrors object must contain the expected broken field
+pm.test("[" + scenario + "] Field '" + expectedField + "' is reported in errors", function () {
+    var body = pm.response.json();
+    pm.expect(body.fieldErrors).to.be.an("object");
+    pm.expect(body.fieldErrors).to.have.property(expectedField);
+});
+
+// The error type must be correct
+pm.test("[" + scenario + "] Error type is Validation Failed", function () {
+    pm.expect(pm.response.json().error).to.equal("Validation Failed");
+});
+```
+
+#### Step 4 — Run
+
+1. Collection Runner → select only `Create Product — Invalid`
+2. Data file: `test-data/02-invalid-products.csv`
+3. Run
+
+#### What to observe
+
+- The **scenario** column value appears in each test name — this makes failures easy to read:
+  ```
+  ✅ [Missing description] Status is 400 Bad Request
+  ✅ [Missing description] Field 'description' is reported in errors
+  ✅ [Missing description] Error type is Validation Failed
+  ```
+- If any row passes validation unexpectedly (returns 201), you know the API is missing a validation rule
+
+---
+
+### Exercise 3 — Filter Products with Multiple Query Params
+
+**Goal:** Run 7 different filter combinations and verify the results match the filter rules.
+
+**Data file:** [`test-data/03-filter-products.csv`](test-data/03-filter-products.csv)
+
+```
+category,minPrice,maxPrice,filterDescription
+Electronics,,,Filter by Electronics category only
+Books,,,Filter by Books category only
+Footwear,,,Filter by Footwear category only
+,50,200,Price between 50 and 200 (any category)
+,10,50,Price between 10 and 50 (any category)
+Electronics,500,2000,Electronics between 500 and 2000
+Toys,,,Category with no products - expect empty list
+```
+
+#### Step 1 — Add the request
+
+1. Add request → name it `Filter Products`
+2. Method: **GET**
+3. URL: `{{baseUrl}}/api/products`
+
+#### Step 2 — Add Query Parameters
+
+1. Click the **Params** tab
+2. Add these three rows (all optional — leave Value blank for now):
+
+| Key | Value |
+|-----|-------|
+| `category` | `{{category}}` |
+| `minPrice` | `{{minPrice}}` |
+| `maxPrice` | `{{maxPrice}}` |
+
+> **Postman behaviour:** If a variable resolves to an empty string (because the CSV cell is blank), Postman still sends `?category=` in the URL. The server ignores blank params because our controller uses `@RequestParam(required = false)`.
+
+#### Step 3 — Scripts → Post-response
+
+```javascript
+var filterDesc = pm.iterationData.get("filterDescription");
+var category   = pm.iterationData.get("category");
+var minPrice   = pm.iterationData.get("minPrice");
+var maxPrice   = pm.iterationData.get("maxPrice");
+
+var products = pm.response.json();
+
+// Always passes — even empty list is a valid 200
+pm.test("[" + filterDesc + "] Status is 200", function () {
+    pm.response.to.have.status(200);
+});
+
+pm.test("[" + filterDesc + "] Response is an array", function () {
+    pm.expect(products).to.be.an("array");
+});
+
+// If a category filter was applied, every result must match it
+if (category && category.length > 0) {
+    pm.test("[" + filterDesc + "] All results belong to category: " + category, function () {
+        products.forEach(function(p) {
+            pm.expect(p.category.toLowerCase()).to.equal(category.toLowerCase());
+        });
+    });
+}
+
+// If minPrice was given, every result price must be >= minPrice
+if (minPrice && minPrice.length > 0) {
+    pm.test("[" + filterDesc + "] All prices >= " + minPrice, function () {
+        products.forEach(function(p) {
+            pm.expect(p.price).to.be.at.least(parseFloat(minPrice));
+        });
+    });
+}
+
+// If maxPrice was given, every result price must be <= maxPrice
+if (maxPrice && maxPrice.length > 0) {
+    pm.test("[" + filterDesc + "] All prices <= " + maxPrice, function () {
+        products.forEach(function(p) {
+            pm.expect(p.price).to.be.at.most(parseFloat(maxPrice));
+        });
+    });
+}
+
+// Log for visibility
+console.log("[" + filterDesc + "] Returned " + products.length + " products.");
+```
+
+#### Step 4 — Run
+
+Collection Runner → select `Filter Products` → data file `03-filter-products.csv` → Run.
+
+#### What to observe
+
+- The last row (`Toys`) returns an empty list `[]` — the test still passes because `200 + []` is correct behaviour
+- For rows where `category` is blank, the category assertion is skipped (the `if` block doesn't run)
+- `console.log` output is visible in the **Postman Console** (View → Postman Console, or `Ctrl+Alt+C`)
+
+---
+
+### Exercise 4 — Test Authentication with Multiple Credential Sets
+
+**Goal:** Run the same `GET /orders` endpoint with 5 different username/password combinations and verify the correct status code each time.
+
+**Data file:** [`test-data/04-auth-scenarios.csv`](test-data/04-auth-scenarios.csv)
+
+```
+username,password,expectedStatus,scenario
+admin,password123,200,Valid admin credentials
+user,user123,200,Valid user credentials
+admin,wrongpassword,401,Correct username wrong password
+wronguser,password123,401,Wrong username correct password
+hacker,hacker123,401,Both credentials wrong
+```
+
+#### Step 1 — Add the request
+
+1. Add request → name it `Auth Scenarios`
+2. Method: **GET**
+3. URL: `{{baseUrl}}/api/orders`
+
+#### Step 2 — Set Auth using variables
+
+1. Click **Authorization** tab
+2. Type: **Basic Auth**
+3. Username: `{{username}}`
+4. Password: `{{password}}`
+
+Postman fills these from the CSV on each iteration. No hardcoded credentials.
+
+#### Step 3 — Scripts → Post-response
+
+```javascript
+var scenario       = pm.iterationData.get("scenario");
+var expectedStatus = parseInt(pm.iterationData.get("expectedStatus"));
+
+pm.test("[" + scenario + "] Status is " + expectedStatus, function () {
+    pm.response.to.have.status(expectedStatus);
+});
+
+// For successful calls, assert the response is an array
+if (expectedStatus === 200) {
+    pm.test("[" + scenario + "] Response is a valid orders array", function () {
+        pm.expect(pm.response.json()).to.be.an("array");
+    });
+}
+
+// For failed auth, assert no sensitive data leaks
+if (expectedStatus === 401) {
+    pm.test("[" + scenario + "] Error body does not leak user data", function () {
+        var body = pm.response.text();
+        pm.expect(body).to.not.include("password");
+        pm.expect(body).to.not.include("admin");
+    });
+}
+```
+
+#### Step 4 — Run
+
+Collection Runner → `Auth Scenarios` → `04-auth-scenarios.csv` → Run.
+
+#### What to observe
+
+- Rows 1 and 2 return 200 (green)
+- Rows 3, 4, 5 return 401 (green — the test expects 401)
+- If a 401 row accidentally returns 200, it means authentication is broken — a real security bug
+
+---
+
+### Reading the Collection Runner Results
+
+After a run you see two views:
+
+**Run summary view:**
+
+```
+ Iterations: 5
+ Assertions: 30
+ Failed:      0
+ Skipped:     0
+
+ Iteration 1  ✅  6 / 6 passed
+ Iteration 2  ✅  6 / 6 passed
+ Iteration 3  ✅  6 / 6 passed
+ Iteration 4  ✅  6 / 6 passed
+ Iteration 5  ✅  6 / 6 passed
+```
+
+**When a test fails**, click on that iteration to expand it:
+
+```
+ Iteration 3  ❌  5 / 6 passed
+   ✅ Status is 201 Created
+   ✅ Returned name matches input
+   ❌ Returned price matches input
+      AssertionError: expected 0 to equal 34.99
+      → The price was sent as a string "34.99" instead of a number 34.99
+        Fix: remove the quotes around {{price}} in the request body
+```
+
+**Postman Console** (`Ctrl+Alt+C` / `Cmd+Alt+C`) shows your `console.log()` output alongside each iteration — useful for seeing what values were actually used.
+
+**Export results:** After a run, click **Export Results** (top-right of runner) to save a JSON summary — useful for sharing with the team or attaching to a bug report.
+
+---
+
+### The Most Common Mistakes (and How to Fix Them)
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| `"{{price}}"` (quoted number) | 400 Validation Failed — price invalid | Remove quotes: `{{price}}` |
+| CSV has trailing spaces in column names | Variable not resolving | Check column headers have no spaces around names |
+| Data file not selected in Runner | All `{{variable}}` resolve to empty string | In Runner, click Select File before running |
+| Request not inside a Collection | Collection Runner not available | Move the request into a collection |
+| Blank CSV cells send `?param=` | Filter behaves differently than expected | Use the `if (value && value.length > 0)` guard in scripts |
+| `parseInt` / `parseFloat` not used | `"200" === 200` fails (string vs number) | Wrap with `parseInt()` or `parseFloat()` when comparing |
+
+---
+
+### How the Data File Values Flow
+
+```
+CSV row:                    name=Gaming Chair, price=249.99, category=Furniture
+
+         ↓  Collection Runner reads the row
+
+Request body before send:   { "name": "{{name}}", "price": {{price}}, ... }
+
+         ↓  Postman resolves variables
+
+Request body sent:          { "name": "Gaming Chair", "price": 249.99, ... }
+
+         ↓  Server responds with 201
+
+Post-response script:       pm.iterationData.get("name")  →  "Gaming Chair"
+                            pm.iterationData.get("price") →  "249.99"  ← string! use parseFloat()
+```
+
+> `pm.iterationData.get()` always returns a **string**. Use `parseInt()` or `parseFloat()` before numeric comparisons.
+
+---
+
+## 15. File Upload Operations
+
+### What Makes File Uploads Different?
+
+So far, every request you've sent has had a text body — either nothing (GET) or JSON (POST/PUT). File uploads are different because you're sending **binary data** (images, PDFs, CSVs) alongside optional text metadata.
+
+This changes two things:
+1. **Content-Type** changes from `application/json` to `multipart/form-data`
+2. The **body format** changes from a JSON object to named "parts" — each part contains either text or a file
+
+```
+Regular JSON body:                   Multipart body:
+──────────────────                   ─────────────────────────────────────────────────
+{                                    --boundary
+  "name": "value"                    Content-Disposition: form-data; name="description"
+}
+                                     A text part value here
+                                     --boundary
+                                     Content-Disposition: form-data; name="file"; filename="photo.jpg"
+                                     Content-Type: image/jpeg
+
+                                     [binary file content here]
+                                     --boundary--
+```
+
+| Feature | JSON Request | File Upload (multipart) |
+|---------|-------------|------------------------|
+| Content-Type | `application/json` | `multipart/form-data` |
+| Body format | Text (JSON string) | Binary parts |
+| Postman Body tab setting | raw → JSON | form-data |
+| Suitable for | Structured data | Files + optional metadata |
+
+---
+
+### Our File Upload Endpoints
+
+Both endpoints live on the same server you have been using throughout this guide — `http://localhost:8080`. No external service needed.
+
+| Method | URL | Auth | What it does |
+|--------|-----|------|-------------|
+| `POST` | `http://localhost:8080/api/files/upload` | ADMIN only | Upload one file with an optional description |
+| `POST` | `http://localhost:8080/api/files/upload-multiple` | ADMIN only | Upload two or more files with an optional category label |
+
+> **Start the server first** (if it is not already running): `mvn spring-boot:run` — same as every other section.
+
+---
+
+### API 1: Single File Upload
+
+**Full URL:** `http://localhost:8080/api/files/upload`
+
+Accepts one file and an optional text description. Returns the file's name, type, size, and a confirmation message.
+
+#### Exercise — Upload a Single File in Postman
+
+1. Open a new request tab
+2. Set method to **POST**
+3. Set URL to: `http://localhost:8080/api/files/upload`
+4. Click the **Authorization** tab → Type: **Basic Auth** → Username: `admin` → Password: `password123`
+5. Click the **Body** tab
+6. Select **form-data** (NOT raw, NOT JSON — this is the key difference from all previous requests)
+
+Add these two rows in the form-data table:
+
+| Key | Type | Value |
+|-----|------|-------|
+| `file` | **File** | Click the file selector on the right → pick any file from your computer |
+| `description` | Text | `My first uploaded file` |
+
+> **Critical — the Type dropdown:** After you type `file` as the key, look for a small dropdown on the right side of that row that currently says `Text`. Click it and change it to **File**. Only then does a file picker appear in the Value column. If you leave it as `Text`, Postman sends the word "undefined" as plain text instead of the actual file, and the server returns 400.
+
+7. Click **Send**
+
+#### What the server returns (201 Created)
+
+```json
+{
+  "fileName": "photo.jpg",
+  "fileType": "image/jpeg",
+  "size": 204800,
+  "description": "My first uploaded file",
+  "message": "File uploaded successfully"
+}
+```
+
+**What to notice:**
+- `fileName` — the original name of the file as it existed on your machine
+- `fileType` — the MIME type (`image/jpeg`, `application/pdf`, `text/plain`, etc.)
+- `size` — file size in bytes
+- `Content-Type` in the request was set to `multipart/form-data` **automatically by Postman** when you selected `form-data` — you never typed it
+
+> **Compare with Section 5:** In Section 5 you selected `raw → JSON` and Postman set `Content-Type: application/json`. Here you selected `form-data` and Postman sets `Content-Type: multipart/form-data; boundary=...`. The body format you pick in Postman always drives the Content-Type header.
+
+#### Try the error cases
+
+**Omit the file (send description only):**
+Remove the `file` row entirely and click Send.
+
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "No file received. Make sure you selected a file and set the Type to 'File' in Postman."
+}
+```
+
+**Send without auth:**
+Remove the Authorization header and click Send → `401 Unauthorized`
+
+**Send as USER instead of ADMIN:**
+Change credentials to `user` / `user123` → `403 Forbidden`
+
+---
+
+### API 2: Multiple File Upload
+
+**Full URL:** `http://localhost:8080/api/files/upload-multiple`
+
+Accepts two or more files in a single request, plus an optional category label. Returns the total count and per-file details.
+
+#### Exercise — Upload Multiple Files in Postman
+
+1. Open a new request tab
+2. Set method to **POST**
+3. Set URL to: `http://localhost:8080/api/files/upload-multiple`
+4. Click the **Authorization** tab → Type: **Basic Auth** → Username: `admin` → Password: `password123`
+5. Click the **Body** tab → select **form-data**
+
+Add these rows — set Type to **File** for every `files` row:
+
+| Key | Type | Value |
+|-----|------|-------|
+| `files` | **File** | Pick any file from your computer |
+| `files` | **File** | Pick a second file |
+| `files` | **File** | Pick a third file |
+| `category` | Text | `Product Photos` |
+
+> **Same key name on every file row — this is intentional.** HTTP multipart sends arrays by repeating the same field name. Spring Boot collects all parts named `files` into a `List<MultipartFile>`. This is different from JSON where you'd write `"files": [...]`.
+
+6. Click **Send**
+
+#### What the server returns (201 Created)
+
+```json
+{
+  "uploadedCount": 3,
+  "category": "Product Photos",
+  "files": [
+    {
+      "fileName": "front.jpg",
+      "fileType": "image/jpeg",
+      "size": 102400
+    },
+    {
+      "fileName": "back.jpg",
+      "fileType": "image/jpeg",
+      "size": 98304
+    },
+    {
+      "fileName": "side.jpg",
+      "fileType": "image/jpeg",
+      "size": 87040
+    }
+  ],
+  "message": "3 file(s) uploaded successfully"
+}
+```
+
+**What to notice:**
+- `uploadedCount` tells you how many files the server actually received
+- `files` is an array — one entry per file — each with its own `fileName`, `fileType`, and `size`
+- `category` echoes back the text label you sent
+
+#### Try the error cases
+
+**Send only one files row instead of multiple:**
+You can send just one file — the server accepts it and returns `uploadedCount: 1`.
+
+**Send no files at all:**
+Remove all `files` rows, keep only `category` → `400 Bad Request`
+
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "No files received. Add at least one file row with Type set to 'File' in Postman."
+}
+```
+
+---
+
+### How to See the Endpoints in Swagger
+
+With the server running, open `http://localhost:8080/swagger-ui.html`. You will see a new **File Upload** group alongside Products and Orders. Click any endpoint there and use **Try it out** to upload directly from the browser — Swagger handles the multipart form-data automatically.
+
+---
+
+### How the Code Works (inside FileUploadController.java)
+
+Open [FileUploadController.java](src/main/java/com/learn/restapi/controller/FileUploadController.java) to follow along.
+
+**Single file endpoint:**
+```java
+@PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public ResponseEntity<FileUploadResponse> uploadSingleFile(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam(required = false) String description) {
+```
+
+- `consumes = MediaType.MULTIPART_FORM_DATA_VALUE` — tells Spring this endpoint only accepts `multipart/form-data`, not JSON
+- `@RequestParam("file") MultipartFile file` — Spring reads the form-data part named `file` and wraps it in a `MultipartFile` object
+- `MultipartFile` gives you: `getOriginalFilename()`, `getContentType()`, `getSize()`, `getBytes()`, `getInputStream()`
+- `@RequestParam(required = false) String description` — reads the `description` text part; null if not sent
+
+**Multiple files endpoint:**
+```java
+@PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public ResponseEntity<MultiFileUploadResponse> uploadMultipleFiles(
+        @RequestParam("files") List<MultipartFile> files,
+        @RequestParam(required = false) String category) {
+```
+
+- `List<MultipartFile> files` — Spring collects every form-data part named `files` into this list
+- That is the only difference from the single-file endpoint — one object becomes a list
+
+| What you set in Postman | What Spring receives |
+|------------------------|---------------------|
+| Body → form-data | `Content-Type: multipart/form-data` |
+| Key `file`, Type File | `@RequestParam("file") MultipartFile file` |
+| Key `description`, Type Text | `@RequestParam String description` |
+| Key `files` repeated 3 times, Type File each | `@RequestParam("files") List<MultipartFile> files` — 3 items |
+
+---
+
+### Common File Upload Errors
+
+| Error | Status | Cause | Fix |
+|-------|--------|-------|-----|
+| Unsupported Media Type | 415 | Body set to `raw → JSON` instead of `form-data` | Switch Postman Body tab to **form-data** |
+| No file received / Bad Request | 400 | The `file` key row's Type was left as `Text` | Change the Type dropdown to **File** for the file row |
+| No files received / Bad Request | 400 | Sent `category` text but no actual file rows | Add at least one file row with Type **File** |
+| Unauthorized | 401 | No Authorization header | Add Basic Auth: admin / password123 |
+| Forbidden | 403 | Using `user` credentials instead of `admin` | Use admin / password123 — file upload is ADMIN only |
+| Payload Too Large | 413 | File exceeds the 10 MB per-file limit | Use a smaller file (limit is set in application.properties) |
+
+---
+
+### File Upload vs JSON — When to Use Which
+
+| Use `raw → JSON` when... | Use `form-data` when... |
+|--------------------------|------------------------|
+| Sending structured data (product details, order) | Sending a file (image, PDF, CSV, video) |
+| All values are text or numbers | At least one value is binary file data |
+| You need nested objects in the body | Flat key-value pairs alongside a file |
+| Creating or updating a resource with text data | Attaching a document or photo to a resource |
+
+---
+
+## 16. Build a Tiny REST API (Your Exercise)
 
 Now you build one. Add a **Coupon** feature to this project.
 
@@ -1396,6 +2127,8 @@ POST   http://localhost:8080/api/orders            (user/user123)
 PATCH  http://localhost:8080/api/orders/1/status   (user/user123)
 GET    http://localhost:8080/swagger-ui.html       (no auth)
 GET    http://localhost:8080/v3/api-docs           (no auth)
+POST   http://localhost:8080/api/files/upload          (admin/password123) — form-data, key: file (File type)
+POST   http://localhost:8080/api/files/upload-multiple (admin/password123) — form-data, key: files (File type, repeat per file)
 ```
 
 ### Sample request bodies

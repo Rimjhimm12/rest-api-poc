@@ -1,0 +1,8 @@
+category,minPrice,maxPrice,filterDescription
+Electronics,,,Filter by Electronics category only
+Books,,,Filter by Books category only
+Footwear,,,Filter by Footwear category only
+,50,200,Price between 50 and 200 (any category)
+,10,50,Price between 10 and 50 (any category)
+Electronics,500,2000,Electronics between 500 and 2000
+Toys,,,Category with no products - expect empty list

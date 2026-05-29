@@ -1,0 +1,364 @@
+{
+  "info": {
+    "_postman_id": "dda60270-ec7a-433b-8c56-c69e23f184ee",
+    "name": "E-Commerce API — Data-Driven Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "50110370",
+    "_collection_link": "https://go.postman.co/collection/50110370-dda60270-ec7a-433b-8c56-c69e23f184ee?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Create products from CSV file",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Read the expected values from the current CSV row",
+              "var expectedName     = pm.iterationData.get(\"name\");",
+              "var expectedCategory = pm.iterationData.get(\"category\");",
+              "var expectedPrice    = parseFloat(pm.iterationData.get(\"price\"));",
+              "var expectedStock    = parseInt(pm.iterationData.get(\"stock\"));",
+              "",
+              "// Assert status code",
+              "pm.test(\"Status is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "// Assert the response body matches what we sent",
+              "pm.test(\"Returned name matches input\", function () {",
+              "    pm.expect(pm.response.json().name).to.equal(expectedName);",
+              "});",
+              "",
+              "pm.test(\"Returned category matches input\", function () {",
+              "    pm.expect(pm.response.json().category).to.equal(expectedCategory);",
+              "});",
+              "",
+              "pm.test(\"Returned price matches input\", function () {",
+              "    pm.expect(pm.response.json().price).to.equal(expectedPrice);",
+              "});",
+              "",
+              "pm.test(\"Returned stock matches input\", function () {",
+              "    pm.expect(pm.response.json().stock).to.equal(expectedStock);",
+              "});",
+              "",
+              "pm.test(\"Response contains an auto-generated id\", function () {",
+              "    pm.expect(pm.response.json().id).to.be.a(\"number\");",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUsername}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{{variableName}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Test Authentication with Multiple Credential Sets",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var scenario       = pm.iterationData.get(\"scenario\");",
+              "var expectedStatus = parseInt(pm.iterationData.get(\"expectedStatus\"));",
+              "",
+              "pm.test(\"[\" + scenario + \"] Status is \" + expectedStatus, function () {",
+              "    pm.response.to.have.status(expectedStatus);",
+              "});",
+              "",
+              "// For successful calls, assert the response is an array",
+              "if (expectedStatus === 200) {",
+              "    pm.test(\"[\" + scenario + \"] Response is a valid orders array\", function () {",
+              "        pm.expect(pm.response.json()).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "// For failed auth, assert no sensitive data leaks",
+              "if (expectedStatus === 401) {",
+              "    pm.test(\"[\" + scenario + \"] Error body does not leak user data\", function () {",
+              "        var body = pm.response.text();",
+              "        pm.expect(body).to.not.include(\"password\");",
+              "        pm.expect(body).to.not.include(\"admin\");",
+              "    });",
+              "}"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            },
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Test Invalid Inputs (Negative Testing)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var scenario      = pm.iterationData.get(\"scenario\");",
+              "var expectedField = pm.iterationData.get(\"expectedField\");",
+              "",
+              "// Every row must return 400",
+              "pm.test(\"[\" + scenario + \"] Status is 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "// The fieldErrors object must contain the expected broken field",
+              "pm.test(\"[\" + scenario + \"] Field '\" + expectedField + \"' is reported in errors\", function () {",
+              "    var body = pm.response.json();",
+              "    pm.expect(body.fieldErrors).to.be.an(\"object\");",
+              "    pm.expect(body.fieldErrors).to.have.property(expectedField);",
+              "});",
+              "",
+              "// The error type must be correct",
+              "pm.test(\"[\" + scenario + \"] Error type is Validation Failed\", function () {",
+              "    pm.expect(pm.response.json().error).to.equal(\"Validation Failed\");",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUsername}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{{variableName}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Filter Products with Multiple Query Params",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var filterDesc = pm.iterationData.get(\"filterDescription\");",
+              "var category   = pm.iterationData.get(\"category\");",
+              "var minPrice   = pm.iterationData.get(\"minPrice\");",
+              "var maxPrice   = pm.iterationData.get(\"maxPrice\");",
+              "",
+              "var products = pm.response.json();",
+              "",
+              "// Always passes — even empty list is a valid 200",
+              "pm.test(\"[\" + filterDesc + \"] Status is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"[\" + filterDesc + \"] Response is an array\", function () {",
+              "    pm.expect(products).to.be.an(\"array\");",
+              "});",
+              "",
+              "// If a category filter was applied, every result must match it",
+              "if (category && category.length > 0) {",
+              "    pm.test(\"[\" + filterDesc + \"] All results belong to category: \" + category, function () {",
+              "        products.forEach(function(p) {",
+              "            pm.expect(p.category.toLowerCase()).to.equal(category.toLowerCase());",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "// If minPrice was given, every result price must be >= minPrice",
+              "if (minPrice && minPrice.length > 0) {",
+              "    pm.test(\"[\" + filterDesc + \"] All prices >= \" + minPrice, function () {",
+              "        products.forEach(function(p) {",
+              "            pm.expect(p.price).to.be.at.least(parseFloat(minPrice));",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "// If maxPrice was given, every result price must be <= maxPrice",
+              "if (maxPrice && maxPrice.length > 0) {",
+              "    pm.test(\"[\" + filterDesc + \"] All prices <= \" + maxPrice, function () {",
+              "        products.forEach(function(p) {",
+              "            pm.expect(p.price).to.be.at.most(parseFloat(maxPrice));",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "// Log for visibility",
+              "console.log(\"[\" + filterDesc + \"] Returned \" + products.length + \" products.\");"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products?category={{catagory}}&maxPrice={{maxPrice}}&minPrice={{minPrice}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ],
+          "query": [
+            {
+              "key": "category",
+              "value": "{{catagory}}"
+            },
+            {
+              "key": "maxPrice",
+              "value": "{{maxPrice}}"
+            },
+            {
+              "key": "minPrice",
+              "value": "{{minPrice}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "New Request",
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "variableName",
+      "value": ""
+    },
+    {
+      "key": "catagory",
+      "value": ""
+    },
+    {
+      "key": "maxPrice",
+      "value": ""
+    },
+    {
+      "key": "minPrice",
+      "value": ""
+    }
+  ]
+}

@@ -61,6 +61,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
 
+                // File upload — ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/files/**").hasRole("ADMIN")
+
                 // Orders — any authenticated user
                 .requestMatchers("/api/orders/**").authenticated()
 

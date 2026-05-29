@@ -30,3 +30,9 @@ logs/
 
 # Spring Boot
 spring-pid
+
+# Node / Newman local artifacts
+node_modules/
+newman/
+report.html
+*.postman_test_run.json

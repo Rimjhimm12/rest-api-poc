@@ -8,6 +8,7 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,6 +48,14 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body(new ErrorResponse(415, "Unsupported Media Type",
                         "Add header 'Content-Type: application/json'. Received: " + received));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        return ResponseEntity
+                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(new ErrorResponse(413, "Payload Too Large",
+                        "File size exceeds the allowed limit. Maximum per file: 10 MB, maximum per request: 30 MB."));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

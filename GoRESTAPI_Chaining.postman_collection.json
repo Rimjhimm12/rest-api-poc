@@ -1,0 +1,301 @@
+{
+  "info": {
+    "_postman_id": "77ce4c27-e295-4862-bd96-46981a2b3fac",
+    "name": "GoRESTAPI_Chaining",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "50110370",
+    "_collection_link": "https://go.postman.co/collection/50110370-77ce4c27-e295-4862-bd96-46981a2b3fac?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "201 CREATE",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.environment.set(\"userID\", jsonData.id);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              " ",
+              " var randomString = Math.random().toString(36).substring(2);",
+              " pm.environment.set(\"name\", \"user\" + randomString);",
+              " pm.environment.set(\"email\", \"user\" + randomString+ \"@gmail.com\");"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"name\": \"{{name}}\",\n    \"gender\": \"male\",\n    \"email\": \"{{email}}\",\n    \"status\": \"Inactive\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_URL}}/public/v2/users",
+          "host": [
+            "{{host_URL}}"
+          ],
+          "path": [
+            "public",
+            "v2",
+            "users"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "200 GET",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"value of JSON fields\", ()=> {",
+              "    var responseBody = pm.response.json();",
+              "",
+              "    pm.expect(responseBody.id).to.eql(pm.environment.get(\"userID\"));",
+              "    pm.expect(responseBody.name).to.eql(pm.environment.get(\"name\"));",
+              "    pm.expect(responseBody.email).to.eql(pm.environment.get(\"email\"));",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{host_URL}}/public/v2/users/{{userID}}",
+          "host": [
+            "{{host_URL}}"
+          ],
+          "path": [
+            "public",
+            "v2",
+            "users",
+            "{{userID}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "200 PUT",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var random = Math.random().toString(36).substring(2);",
+              " pm.environment.set(\"updatedName\", \"updatedUser\" + random);",
+              " pm.environment.set(\"updatedEmail\", \"updatedUser\" + random+ \"@gmail.com\");"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"name\": \"{{updatedName}}\",\n    \"gender\": \"male\",\n    \"email\": \"{{updatedEmail}}\",\n    \"status\": \"active\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_URL}}/public/v2/users/{{userID}}",
+          "host": [
+            "{{host_URL}}"
+          ],
+          "path": [
+            "public",
+            "v2",
+            "users",
+            "{{userID}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "200 GET after PUT/update",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"valiadting updated user details\", ()=> {",
+              " pm.expect(pm.response.json().name).to.eql(pm.environment.get(\"updatedName\"));",
+              " pm.expect(pm.response.json().email).to.eql(pm.environment.get(\"updatedEmail\"));",
+              "",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "packages": {},
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{host_URL}}/public/v2/users/{{userID}}",
+          "host": [
+            "{{host_URL}}"
+          ],
+          "path": [
+            "public",
+            "v2",
+            "users",
+            "{{userID}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "204 DELETE",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.environment.unset(\"userID\");",
+              "pm.environment.unset(\"name\");",
+              "pm.environment.unset(\"email\");",
+              "pm.environment.unset(\"updatedName\");  ",
+              "pm.environment.unset(\"host\");  ",
+              "pm.environment.unset(\"updatedEmail\");  ",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{host_URL}}/public/v2/users/{{userID}}",
+          "host": [
+            "{{host_URL}}"
+          ],
+          "path": [
+            "public",
+            "v2",
+            "users",
+            "{{userID}}"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "2c1afb367a6581c474ba8bb2747ea5b24e29d9397caf34f3b02bc549da3ffe69",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "host_URL",
+      "value": ""
+    },
+    {
+      "key": "userID",
+      "value": ""
+    }
+  ]
+}
