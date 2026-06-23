@@ -70,4 +70,33 @@ public class ProductService {
     public int count() {
         return products.size();
     }
+
+    // Used by GET /api/products/category/{category}
+    public List<Product> findByCategory(String category) {
+        return products.stream()
+                .filter(p -> p.getCategory().equalsIgnoreCase(category))
+                .collect(Collectors.toList());
+    }
+
+    // Used by GET /api/products/{id}/related?limit=N
+    public List<Product> findRelated(Long id, int limit) {
+        Product source = findById(id)
+                .orElseThrow(() -> new com.learn.restapi.exception.ResourceNotFoundException("Product", id));
+        return products.stream()
+                .filter(p -> !p.getId().equals(id))
+                .filter(p -> p.getCategory().equalsIgnoreCase(source.getCategory()))
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    // Used by PATCH /api/products/{id}/stock/{quantity}
+    public Optional<Product> updateStock(Long id, int quantity) {
+        if (quantity < 0) {
+            throw new IllegalArgumentException("Stock quantity cannot be negative");
+        }
+        return findById(id).map(p -> {
+            p.setStock(quantity);
+            return p;
+        });
+    }
 }

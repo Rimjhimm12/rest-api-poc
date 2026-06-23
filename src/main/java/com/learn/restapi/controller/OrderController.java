@@ -36,6 +36,49 @@ public class OrderController {
         return ResponseEntity.ok(orderService.findAll());
     }
 
+    // -------------------------------------------------------------------------
+    // PATTERN 5 — Enum path variable
+    //
+    // /api/orders/status/{status}
+    //
+    // Spring automatically converts the string in the URL (e.g. "PENDING") to
+    // the Java enum Order.Status. If the value doesn't match any enum constant
+    // the request is rejected with 400 — handled by GlobalExceptionHandler.
+    //
+    // "status" is a literal prefix → Spring resolves this BEFORE /{id}.
+    // -------------------------------------------------------------------------
+    @GetMapping("/status/{status}")
+    @Operation(summary = "List orders filtered by status (PATTERN 5: enum path variable)")
+    public ResponseEntity<List<Order>> getByStatus(@PathVariable Order.Status status) {
+        List<Order> result = orderService.findByStatus(status);
+        return ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(result.size()))
+                .body(result);
+    }
+
+    // -------------------------------------------------------------------------
+    // PATTERN 6 — Nested resource + descriptive variable name
+    //
+    // /api/orders/{orderId}/summary
+    //
+    // Named {orderId} (not {id}) to make intent clear when multiple resources
+    // appear in the same URL. Returns a lightweight summary map rather than
+    // the full Order object — useful when the caller only needs a few fields.
+    // -------------------------------------------------------------------------
+    @GetMapping("/{orderId}/summary")
+    @Operation(summary = "Get a brief order summary (PATTERN 6: nested resource + named path variable)")
+    public ResponseEntity<Map<String, Object>> getOrderSummary(@PathVariable Long orderId) {
+        Order order = orderService.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+        return ResponseEntity.ok(Map.of(
+                "orderId",    order.getId(),
+                "productId",  order.getProductId(),
+                "quantity",   order.getQuantity(),
+                "totalPrice", order.getTotalPrice(),
+                "status",     order.getStatus()
+        ));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get an order by ID")
     public ResponseEntity<Order> getOrder(@PathVariable Long id) {

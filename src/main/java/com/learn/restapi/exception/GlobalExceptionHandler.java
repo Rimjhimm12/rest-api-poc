@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,6 +57,21 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(new ErrorResponse(413, "Payload Too Large",
                         "File size exceeds the allowed limit. Maximum per file: 10 MB, maximum per request: 30 MB."));
+    }
+
+    // Catches bad path variable values — e.g. /api/orders/status/FLYING when
+    // FLYING is not a valid Order.Status enum constant, or a non-numeric value
+    // where a Long is expected (e.g. /api/products/abc).
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String paramName  = ex.getName();
+        String givenValue = ex.getValue() != null ? ex.getValue().toString() : "null";
+        String expected   = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown";
+        String message    = "Invalid value '" + givenValue + "' for path variable '" + paramName
+                          + "'. Expected type: " + expected;
+        return ResponseEntity
+                .badRequest()
+                .body(new ErrorResponse(400, "Bad Request", message));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

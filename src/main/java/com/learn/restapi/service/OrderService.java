@@ -36,4 +36,11 @@ public class OrderService {
             return order;
         });
     }
+
+    // Used by GET /api/orders/status/{status}
+    public List<Order> findByStatus(Order.Status status) {
+        return orders.stream()
+                .filter(o -> o.getStatus() == status)
+                .collect(java.util.stream.Collectors.toList());
+    }
 }

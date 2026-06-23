@@ -21,8 +21,9 @@
 12. [Run Automated Tests with REST-assured](#12-run-automated-tests-with-rest-assured)
 13. [Variables in API Testing](#13-variables-in-api-testing)
 14. [Data-Driven API Testing in Postman](#14-data-driven-api-testing-in-postman)
-15. [File Upload Operations](#15-file-upload-operations)
-16. [Build a Tiny REST API (Your Exercise)](#16-build-a-tiny-rest-api-your-exercise)
+15. [Path Parameters — Six Patterns](#15-path-parameters--six-patterns)
+16. [File Upload Operations](#16-file-upload-operations)
+17. [Build a Tiny REST API (Your Exercise)](#17-build-a-tiny-rest-api-your-exercise)
 
 ---
 
@@ -1776,7 +1777,259 @@ Post-response script:       pm.iterationData.get("name")  →  "Gaming Chair"
 
 ---
 
-## 15. File Upload Operations
+## 15. Path Parameters — Six Patterns
+
+A **path variable** is a value embedded directly inside the URL path, surrounded by `{}` in the route definition.
+
+```
+/api/products/{id}           ← {id} is a path variable
+/api/products/category/{category}   ← {category} is a path variable
+/api/products/{id}/stock/{quantity} ← two path variables in one URL
+```
+
+Spring extracts the value and injects it into your method with `@PathVariable`.
+
+### Path Variable vs Query Parameter — when to use which
+
+| Situation | Use | Example |
+|-----------|-----|---------|
+| Identifying a specific resource | Path variable | `/api/products/42` |
+| Filtering or searching a collection | Query param | `/api/products?category=Electronics` |
+| The value is **required** | Path variable | `/api/orders/7/status` |
+| The value is **optional** | Query param | `/api/products?minPrice=50` |
+| The value identifies a sub-resource | Path variable | `/api/products/42/price` |
+
+---
+
+### Pattern 1 — String Path Variable (non-numeric)
+
+**Endpoint:** `GET /api/products/category/{category}`
+
+The value in `{category}` is a plain `String` — not a number. Spring injects it directly.
+
+```java
+@GetMapping("/category/{category}")
+public ResponseEntity<List<Product>> getByCategory(@PathVariable String category) {
+    List<Product> result = productService.findByCategory(category);
+    return ResponseEntity.ok().header("X-Total-Count", ...).body(result);
+}
+```
+
+**Try in Postman:**
+```
+GET http://localhost:8080/api/products/category/Electronics
+GET http://localhost:8080/api/products/category/Books
+GET http://localhost:8080/api/products/category/Toys      ← returns []
+```
+
+**Compare with query param version (Section 7):**
+```
+GET /api/products?category=Electronics      ← query param (filter, optional)
+GET /api/products/category/Electronics      ← path variable (identifies resource, required)
+```
+Both return the same data. The difference is in the URL design contract.
+`X-Total-Count` header in the response tells you how many items matched.
+
+---
+
+### Pattern 2 — Sub-Resource / Field Endpoint
+
+**Endpoint:** `GET /api/products/{id}/price`
+
+A literal segment after the ID variable drills into one specific field. The caller gets only what they need — not the full product object.
+
+```java
+@GetMapping("/{id}/price")
+public ResponseEntity<Map<String, Object>> getPrice(@PathVariable Long id) {
+    Product p = productService.findById(id).orElseThrow(...);
+    return ResponseEntity.ok(Map.of("id", p.getId(), "name", p.getName(), "price", p.getPrice()));
+}
+```
+
+**Try in Postman:**
+```
+GET http://localhost:8080/api/products/1/price
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "name": "iPhone 15 Pro",
+  "price": 1099.99
+}
+```
+
+**Why use this pattern?**
+- Mobile clients on slow connections want minimal payloads
+- A price-checking service only cares about `price`, not `description` or `stock`
+
+---
+
+### Pattern 3 — Path Variable + Query Parameter Together
+
+**Endpoint:** `GET /api/products/{id}/related?limit=3`
+
+The path variable identifies **which** product; the query param controls **how many** results to return. Two different roles, handled by two different mechanisms.
+
+```java
+@GetMapping("/{id}/related")
+public ResponseEntity<List<Product>> getRelated(
+        @PathVariable Long id,
+        @RequestParam(defaultValue = "3") int limit) {   // ← optional, default = 3
+    return ResponseEntity.ok(productService.findRelated(id, limit));
+}
+```
+
+**Try in Postman:**
+```
+GET http://localhost:8080/api/products/1/related           ← default limit=3
+GET http://localhost:8080/api/products/1/related?limit=2   ← override to 2
+GET http://localhost:8080/api/products/1/related?limit=10  ← ask for up to 10
+```
+
+`X-Source-Id` in the response header confirms which product's related items you got.
+
+---
+
+### Pattern 4 — Multiple Path Variables in One URL
+
+**Endpoint:** `PATCH /api/products/{id}/stock/{quantity}`
+
+Two `{}` placeholders in the same path, each mapped to a different `@PathVariable`. Spring matches them by **name** — `{id}` binds to the parameter named `id`, `{quantity}` binds to `quantity`.
+
+```java
+@PatchMapping("/{id}/stock/{quantity}")
+public ResponseEntity<Product> updateStock(
+        @PathVariable Long id,
+        @PathVariable int quantity) {       // ← different name, different type
+    return ResponseEntity.ok(productService.updateStock(id, quantity).orElseThrow(...));
+}
+```
+
+**Try in Postman (requires admin auth):**
+```
+PATCH http://localhost:8080/api/products/3/stock/250   ← set product 3 stock to 250
+PATCH http://localhost:8080/api/products/3/stock/0     ← set to 0 (out of stock)
+PATCH http://localhost:8080/api/products/3/stock/-5    ← returns 400 (negative stock)
+```
+
+**Error case — invalid type:**
+```
+PATCH http://localhost:8080/api/products/3/stock/abc   ← "abc" can't become an int → 400
+```
+Response:
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Invalid value 'abc' for path variable 'quantity'. Expected type: int"
+}
+```
+
+---
+
+### Pattern 5 — Enum Path Variable
+
+**Endpoint:** `GET /api/orders/status/{status}`
+
+Spring automatically converts the URL string to a Java enum constant. If the value doesn't match any constant, it returns 400 — no try/catch needed in your controller.
+
+```java
+@GetMapping("/status/{status}")
+public ResponseEntity<List<Order>> getByStatus(@PathVariable Order.Status status) {
+    return ResponseEntity.ok(orderService.findByStatus(status));
+}
+```
+
+**Try in Postman (requires auth):**
+```
+GET http://localhost:8080/api/orders/status/PENDING      ← valid enum
+GET http://localhost:8080/api/orders/status/SHIPPED      ← valid enum
+GET http://localhost:8080/api/orders/status/FLYING       ← invalid → 400
+```
+
+Response for invalid enum:
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Invalid value 'FLYING' for path variable 'status'. Expected type: Status"
+}
+```
+
+Valid values: `PENDING`, `CONFIRMED`, `SHIPPED`, `DELIVERED`, `CANCELLED`
+
+> **Why not use a query param here?**  
+> `GET /api/orders/status/PENDING` treats the status as a resource identifier — you're asking for "the PENDING orders resource". `GET /api/orders?status=PENDING` treats it as an optional filter. Both are valid designs; the path variable version implies the status is a first-class concept in the API.
+
+---
+
+### Pattern 6 — Nested Resource with Descriptive Variable Name
+
+**Endpoint:** `GET /api/orders/{orderId}/summary`
+
+Named `{orderId}` instead of `{id}` — when a URL contains multiple resources (e.g. `/api/customers/{customerId}/orders/{orderId}`), descriptive names prevent confusion. Returns a lightweight `Map` instead of the full `Order` object.
+
+```java
+@GetMapping("/{orderId}/summary")
+public ResponseEntity<Map<String, Object>> getOrderSummary(@PathVariable Long orderId) {
+    Order order = orderService.findById(orderId).orElseThrow(...);
+    return ResponseEntity.ok(Map.of(
+        "orderId",   order.getId(),
+        "status",    order.getStatus(),
+        "totalPrice", order.getTotalPrice()
+    ));
+}
+```
+
+**Try in Postman (requires auth):**
+First place an order, then use its ID:
+```
+POST http://localhost:8080/api/orders          ← place an order, note the returned id
+GET  http://localhost:8080/api/orders/1/summary  ← get just the summary
+GET  http://localhost:8080/api/orders/1          ← compare: full order object
+```
+
+---
+
+### All Six Patterns — Quick Reference
+
+| Pattern | Example URL | Variable type | Key point |
+|---------|------------|--------------|-----------|
+| 1 — String variable | `/api/products/category/Electronics` | `String` | Any non-numeric value |
+| 2 — Sub-resource field | `/api/products/1/price` | `Long` | Drills into one field |
+| 3 — Path + query param | `/api/products/1/related?limit=3` | `Long` + query `int` | Different purposes, different mechanisms |
+| 4 — Multiple variables | `/api/products/1/stock/50` | `Long` + `int` | Matched by placeholder name |
+| 5 — Enum variable | `/api/orders/status/PENDING` | `Order.Status` | Auto-converted, invalid → 400 |
+| 6 — Descriptive name | `/api/orders/1/summary` | `Long orderId` | Clarity in nested URLs |
+
+### Complete Endpoint List (Updated)
+
+```
+Products
+  GET    /api/products                            ← query params filter
+  GET    /api/products/{id}                       ← Pattern: Long id
+  GET    /api/products/category/{category}        ← Pattern 1: String variable
+  GET    /api/products/{id}/price                 ← Pattern 2: sub-resource
+  GET    /api/products/{id}/related?limit=N       ← Pattern 3: path + query
+  PATCH  /api/products/{id}/stock/{quantity}      ← Pattern 4: multiple vars
+  POST   /api/products                            (admin)
+  PUT    /api/products/{id}                       (admin)
+  DELETE /api/products/{id}                       (admin)
+
+Orders
+  GET    /api/orders                              ← all orders
+  GET    /api/orders/status/{status}              ← Pattern 5: enum variable
+  GET    /api/orders/{orderId}/summary            ← Pattern 6: descriptive name
+  GET    /api/orders/{id}                         ← full order object
+  POST   /api/orders
+  PATCH  /api/orders/{id}/status
+```
+
+---
+
+## 16. File Upload Operations
 
 ### What Makes File Uploads Different?
 
@@ -2034,7 +2287,7 @@ public ResponseEntity<MultiFileUploadResponse> uploadMultipleFiles(
 
 ---
 
-## 16. Build a Tiny REST API (Your Exercise)
+## 17. Build a Tiny REST API (Your Exercise)
 
 Now you build one. Add a **Coupon** feature to this project.
 
