@@ -124,4 +124,14 @@ public class OrderController {
                 .orElseThrow(() -> new ResourceNotFoundException("Order", id));
         return ResponseEntity.ok(updated);
     }
+
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete order")
+    public ResponseEntity<Void> deleteOrderById(@PathVariable Long id) {
+        if (!orderService.deleteById(id)) {
+            throw new ResourceNotFoundException("Order", id);
+        }
+        return ResponseEntity.noContent().build();
+    }
 }

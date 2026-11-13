@@ -43,4 +43,10 @@ public class OrderService {
                 .filter(o -> o.getStatus() == status)
                 .collect(java.util.stream.Collectors.toList());
     }
+
+    //DELETE /api/orders/{id}
+    public boolean deleteById(Long id) {
+            return orders.removeIf(o -> o.getId().equals(id));
+        }
+
 }
